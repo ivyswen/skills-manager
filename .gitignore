@@ -1,0 +1,29 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+dist-ssr
+*.local
+
+# Rust / Tauri target
+target
+src-tauri/target
+src-tauri/gen
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent skills directories
+.agents/
+.claude/
+.codex/
+skills-manager-backup*.json
