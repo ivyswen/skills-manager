@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener";
+import { openPath as openerOpenPath, openUrl as openerOpenUrl } from "@tauri-apps/plugin-opener";
 import {
   Repository,
   Project,
@@ -13,6 +13,17 @@ import {
   ImportPreviewResult,
   EntryLink,
   LogFileInfo,
+  MarketSearchResponse,
+  MarketInstallRequest,
+  MarketInstallResult,
+  MarketUninstallCheckResult,
+  MarketUninstallRequest,
+  MarketUninstallResult,
+  MarketSkillDetail,
+  SkillUpdateInfo,
+  SkillUpdateResult,
+  BatchUpdateResult,
+  SkillBackupItem,
 } from "../types";
 
 // 统一封装 Tauri Invoke
@@ -64,6 +75,19 @@ export const api = {
       await invoke<void>("open_path_in_explorer", { path });
     } catch (e) {
       await openerOpenPath(path);
+    }
+  },
+
+  async openUrl(url: string): Promise<void> {
+    try {
+      await openerOpenUrl(url);
+    } catch (e) {
+      console.warn("调用 opener.openUrl 失败，尝试备用方案:", e);
+      try {
+        await openerOpenPath(url);
+      } catch {
+        window.open(url, "_blank");
+      }
     }
   },
 
@@ -152,4 +176,73 @@ export const api = {
   async applyImportConfig(filePath: string, pathMappings: Record<string, string>): Promise<void> {
     return await invoke<void>("config_import_apply", { filePath, pathMappings });
   },
+
+  // --- Market (skills.sh) ---
+  async searchMarketSkills(query: string): Promise<MarketSearchResponse> {
+    return await invoke<MarketSearchResponse>("market_search", { query });
+  },
+
+  async installMarketSkill(req: MarketInstallRequest): Promise<MarketInstallResult> {
+    return await invoke<MarketInstallResult>("market_install", { req });
+  },
+
+  async checkMarketUninstall(skillName: string): Promise<MarketUninstallCheckResult> {
+    return await invoke<MarketUninstallCheckResult>("market_uninstall_check", { skillName });
+  },
+
+  async uninstallMarketSkill(req: MarketUninstallRequest): Promise<MarketUninstallResult> {
+    return await invoke<MarketUninstallResult>("market_uninstall", { req });
+  },
+
+  async getMarketSkillDetail(
+    skillId: string,
+    skillName: string,
+    source: string,
+    installs: number
+  ): Promise<MarketSkillDetail> {
+    return await invoke<MarketSkillDetail>("market_skill_detail", {
+      skillId,
+      skillName,
+      source,
+      installs,
+    });
+  },
+
+  // --- Skill Updates & Backups ---
+  async checkSkillUpdates(skillName?: string): Promise<SkillUpdateInfo[]> {
+    return await invoke<SkillUpdateInfo[]>("skill_check_updates", {
+      skillName: skillName || null,
+    });
+  },
+
+  async updateSkill(skillName: string): Promise<SkillUpdateResult> {
+    return await invoke<SkillUpdateResult>("skill_update_single", {
+      skillName,
+    });
+  },
+
+  async batchUpdateSkills(skillNames: string[] = []): Promise<BatchUpdateResult> {
+    return await invoke<BatchUpdateResult>("skill_update_batch", {
+      skillNames,
+    });
+  },
+
+  async listSkillBackups(skillName?: string): Promise<SkillBackupItem[]> {
+    return await invoke<SkillBackupItem[]>("skill_backup_list", {
+      skillName: skillName || null,
+    });
+  },
+
+  async restoreSkillBackup(backupId: string): Promise<SkillUpdateResult> {
+    return await invoke<SkillUpdateResult>("skill_backup_restore", {
+      backupId,
+    });
+  },
+
+  async deleteSkillBackup(backupId: string): Promise<boolean> {
+    return await invoke<boolean>("skill_backup_delete", {
+      backupId,
+    });
+  },
 };
+

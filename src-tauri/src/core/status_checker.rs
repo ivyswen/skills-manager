@@ -175,6 +175,12 @@ mod tests {
             file_count: 1,
             char_count: 10,
             last_seen_at: Utc::now().to_rfc3339(),
+            source: None,
+            remote_skill_id: None,
+            remote_hash: None,
+            has_update: Some(false),
+            last_checked_at: None,
+            updated_at: None,
         };
 
         let res = diagnose_project_mounts(&temp.join("project"), &[broken_mount], &[skill]);

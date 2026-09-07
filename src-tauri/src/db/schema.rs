@@ -29,6 +29,12 @@ pub fn initialize_tables(conn: &Connection) -> Result<(), AppError> {
             file_count INTEGER NOT NULL DEFAULT 0,
             char_count INTEGER NOT NULL DEFAULT 0,
             last_seen_at TEXT NOT NULL,
+            source TEXT,
+            remote_skill_id TEXT,
+            remote_hash TEXT,
+            has_update INTEGER DEFAULT 0,
+            last_checked_at TEXT,
+            updated_at TEXT,
             UNIQUE(repository_id, name)
         );
 
@@ -104,6 +110,17 @@ pub fn initialize_tables(conn: &Connection) -> Result<(), AppError> {
         ",
     )
     .map_err(AppError::db_error)?;
+
+    // 针对已有旧版数据库：平滑迁移新增列（若已存在则忽略错误）
+    let _ = conn.execute("ALTER TABLE skills ADD COLUMN source TEXT", []);
+    let _ = conn.execute("ALTER TABLE skills ADD COLUMN remote_skill_id TEXT", []);
+    let _ = conn.execute("ALTER TABLE skills ADD COLUMN remote_hash TEXT", []);
+    let _ = conn.execute(
+        "ALTER TABLE skills ADD COLUMN has_update INTEGER DEFAULT 0",
+        [],
+    );
+    let _ = conn.execute("ALTER TABLE skills ADD COLUMN last_checked_at TEXT", []);
+    let _ = conn.execute("ALTER TABLE skills ADD COLUMN updated_at TEXT", []);
 
     Ok(())
 }

@@ -20,6 +20,12 @@ export interface Skill {
   file_count: number;
   char_count: number;
   last_seen_at: string;
+  source?: string | null;
+  remote_skill_id?: string | null;
+  remote_hash?: string | null;
+  has_update?: boolean | null;
+  last_checked_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface Project {
@@ -172,3 +178,95 @@ export interface LogFileInfo {
   size_bytes: number;
   exists: boolean;
 }
+
+export interface MarketSkillItem {
+  id: string;
+  skillId: string;
+  name: string;
+  installs: number;
+  source: string;
+  is_installed: boolean;
+}
+
+export interface MarketSearchResponse {
+  skills: MarketSkillItem[];
+  count: number;
+}
+
+export interface MarketInstallRequest {
+  source: string;
+  skill_id: string;
+  skill_name: string;
+  force_overwrite?: boolean;
+}
+
+export interface MarketInstallResult {
+  success: boolean;
+  skill_name: string;
+  message: string;
+}
+
+export interface MarketUninstallCheckResult {
+  skill_name: string;
+  mounted_projects: string[];
+  can_direct_delete: boolean;
+}
+
+export interface MarketUninstallRequest {
+  skill_name: string;
+  cascade_unmount: boolean;
+}
+
+export interface MarketUninstallResult {
+  success: boolean;
+  skill_name: string;
+  unmounted_count: number;
+  message: string;
+}
+
+export interface MarketSkillDetail {
+  skill_id: string;
+  name: string;
+  source: string;
+  installs: number;
+  is_installed: boolean;
+  local_path?: string | null;
+  content?: string | null;
+}
+
+export interface SkillUpdateInfo {
+  skill_name: string;
+  source: string;
+  skill_id: string;
+  current_hash: string;
+  remote_hash: string;
+  has_update: boolean;
+  last_checked_at: string;
+}
+
+export interface SkillUpdateResult {
+  success: boolean;
+  skill_name: string;
+  old_hash: string;
+  new_hash: string;
+  backup_path?: string | null;
+  message: string;
+}
+
+export interface BatchUpdateResult {
+  total: number;
+  success_count: number;
+  failed_count: number;
+  results: SkillUpdateResult[];
+}
+
+export interface SkillBackupItem {
+  id: string;
+  skill_name: string;
+  source?: string | null;
+  created_at: string;
+  backup_path: string;
+  content_hash: string;
+  reason?: string | null;
+}
+

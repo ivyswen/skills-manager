@@ -292,6 +292,12 @@ fn test_config_export_and_import_with_remapping() {
         file_count: 1,
         char_count: 10,
         last_seen_at: Utc::now().to_rfc3339(),
+        source: None,
+        remote_skill_id: None,
+        remote_hash: None,
+        has_update: Some(false),
+        last_checked_at: None,
+        updated_at: None,
     };
     db.upsert_skills(&[skill]).unwrap();
 

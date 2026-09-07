@@ -60,6 +60,17 @@ pub fn run() {
             commands::config_cmd::config_export,
             commands::config_cmd::config_import_preview,
             commands::config_cmd::config_import_apply,
+            commands::market_cmd::market_search,
+            commands::market_cmd::market_install,
+            commands::market_cmd::market_uninstall_check,
+            commands::market_cmd::market_uninstall,
+            commands::market_cmd::market_skill_detail,
+            commands::skill_update_cmd::skill_check_updates,
+            commands::skill_update_cmd::skill_update_single,
+            commands::skill_update_cmd::skill_update_batch,
+            commands::skill_update_cmd::skill_backup_list,
+            commands::skill_update_cmd::skill_backup_restore,
+            commands::skill_update_cmd::skill_backup_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

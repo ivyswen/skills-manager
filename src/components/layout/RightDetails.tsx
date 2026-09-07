@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Folder,
   ExternalLink,
@@ -13,9 +13,15 @@ import {
   Link2,
   Repeat,
   RefreshCw,
+  ArrowUpCircle,
+  History,
+  Archive,
+  GitFork,
+  Loader2,
+  RotateCcw,
 } from "lucide-react";
 import { api } from "../../services/api";
-import { Project, Skill, Mount, ProjectDiagnostic } from "../../types";
+import { Project, Skill, Mount, ProjectDiagnostic, SkillBackupItem } from "../../types";
 
 interface RightDetailsProps {
   viewMode: "project" | "skill";
@@ -33,6 +39,11 @@ interface RightDetailsProps {
   mountMode?: "copy" | "junction" | "symlink";
   onMountModeChange?: (mode: "copy" | "junction" | "symlink") => void;
   onSwitchMountMode?: (mount: Mount, targetMode: "copy" | "junction" | "symlink") => void;
+  onUpdateSkill?: (skill: Skill) => void;
+  onCheckSkillUpdate?: (skillName: string) => void;
+  isUpdatingSkill?: boolean;
+  isCheckingUpdate?: boolean;
+  onSkillRestored?: () => void;
 }
 
 export const RightDetails: React.FC<RightDetailsProps> = ({
@@ -50,7 +61,72 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
   mountMode = "copy",
   onMountModeChange,
   onSwitchMountMode,
+  onUpdateSkill,
+  onCheckSkillUpdate,
+  isUpdatingSkill = false,
+  isCheckingUpdate = false,
+  onSkillRestored,
 }) => {
+  const [backups, setBackups] = useState<SkillBackupItem[]>([]);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+  const [restoringBackupId, setRestoringBackupId] = useState<string | null>(null);
+
+  const fetchBackups = useCallback(async (skillName: string) => {
+    setLoadingBackups(true);
+    try {
+      const list = await api.listSkillBackups(skillName);
+      setBackups(list);
+    } catch (e) {
+      console.error("Failed to fetch backups:", e);
+    } finally {
+      setLoadingBackups(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (viewMode === "skill" && selectedSkill) {
+      fetchBackups(selectedSkill.name);
+    }
+  }, [viewMode, selectedSkill?.name, selectedSkill?.content_hash, selectedSkill?.updated_at, fetchBackups]);
+
+  const handleRestore = async (backup: SkillBackupItem) => {
+    if (
+      !window.confirm(
+        `确定要从备份 ${backup.id} 恢复技能 "${backup.skill_name}" 吗？\n恢复前将自动为当前版本创建安全备份。`
+      )
+    ) {
+      return;
+    }
+    setRestoringBackupId(backup.id);
+    try {
+      const res = await api.restoreSkillBackup(backup.id);
+      if (res.success) {
+        onSkillRestored?.();
+        if (selectedSkill) {
+          await fetchBackups(selectedSkill.name);
+        }
+      }
+    } catch (e: any) {
+      alert(`恢复备份失败: ${e?.message || e}`);
+    } finally {
+      setRestoringBackupId(null);
+    }
+  };
+
+  const handleDeleteBackup = async (backupId: string) => {
+    if (!window.confirm(`确定要删除此备份吗？删除后将无法恢复此历史快照。`)) {
+      return;
+    }
+    try {
+      await api.deleteSkillBackup(backupId);
+      if (selectedSkill) {
+        await fetchBackups(selectedSkill.name);
+      }
+    } catch (e: any) {
+      alert(`删除备份失败: ${e?.message || e}`);
+    }
+  };
+
   const handleOpenFolder = async (path: string) => {
     try {
       await api.openFolder(path);
@@ -116,10 +192,11 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
   // 模式 B: Skill 详情看板
   if (viewMode === "skill" && selectedSkill) {
     return (
-      <main className="flex-1 bg-slate-950 flex flex-col h-full overflow-y-auto select-none p-6">
+      <main className="flex-1 bg-slate-950 flex flex-col h-full overflow-y-auto select-none p-6 space-y-6">
+        {/* 顶部标题栏 */}
         <div className="flex items-start justify-between border-b border-slate-800 pb-4">
           <div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2.5">
               <h2 className="text-xl font-bold text-slate-100">{selectedSkill.name}</h2>
               <span className={`text-xs px-2 py-0.5 rounded border ${
                 selectedSkill.metadata_status === "valid"
@@ -128,8 +205,27 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
               }`}>
                 {selectedSkill.metadata_status === "valid" ? "元数据完整" : "元数据不完整"}
               </span>
+              {selectedSkill.has_update && (
+                <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/40 text-blue-300 font-medium flex items-center space-x-1">
+                  <ArrowUpCircle className="w-3.5 h-3.5" />
+                  <span>新版本可用</span>
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 mt-1 font-mono">{selectedSkill.canonical_path}</p>
+            {selectedSkill.source && (
+              <div className="flex items-center space-x-2 mt-2 text-xs text-slate-400">
+                <GitFork className="w-3.5 h-3.5 text-slate-500" />
+                <span>上游开源仓库:</span>
+                <button
+                  onClick={() => api.openUrl(`https://github.com/${selectedSkill.source}`)}
+                  className="text-blue-400 hover:text-blue-300 inline-flex items-center space-x-0.5 transition-colors"
+                  title="在浏览器中查看 GitHub 源码库"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center space-x-2">
@@ -149,8 +245,84 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
           </div>
         </div>
 
+        {/* 版本更新比对状态卡片 */}
+        <div className={`border rounded-lg p-4 transition-colors ${
+          selectedSkill.has_update
+            ? "bg-blue-950/20 border-blue-800/60"
+            : "bg-slate-900 border-slate-800"
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className={`p-2.5 rounded-lg ${
+                selectedSkill.has_update
+                  ? "bg-blue-500/20 text-blue-400"
+                  : "bg-slate-800 text-slate-400"
+              }`}>
+                <RefreshCw className={`w-5 h-5 ${isCheckingUpdate ? "animate-spin text-blue-400" : ""}`} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">
+                  {selectedSkill.has_update
+                    ? "检测到上游仓库存在更新版本"
+                    : selectedSkill.source
+                    ? "已是最新版本"
+                    : "本地技能 (未关联开源源)"}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {selectedSkill.has_update ? (
+                    <span>
+                      远端哈希: <span className="font-mono text-blue-300">{selectedSkill.remote_hash?.slice(0, 10)}...</span>
+                      {" | "}
+                      本地哈希: <span className="font-mono text-slate-300">{selectedSkill.content_hash.slice(0, 10)}...</span>
+                    </span>
+                  ) : selectedSkill.source ? (
+                    <span>
+                      当前版本哈希: <span className="font-mono text-slate-300">{selectedSkill.content_hash.slice(0, 10)}...</span>
+                      {selectedSkill.last_checked_at && (
+                        <> · 上次检查: {new Date(selectedSkill.last_checked_at).toLocaleTimeString()}</>
+                      )}
+                    </span>
+                  ) : (
+                    <span>在市场中安装的技能可自动在线接收上游更新</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {selectedSkill.source && (
+                <button
+                  onClick={() => onCheckSkillUpdate?.(selectedSkill.name)}
+                  disabled={isCheckingUpdate || isUpdatingSkill}
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-colors disabled:opacity-50"
+                  title="检查远端 Git 源码库是否有更新"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCheckingUpdate ? "animate-spin text-blue-400" : ""}`} />
+                  <span>{isCheckingUpdate ? "检查中..." : "检查更新"}</span>
+                </button>
+              )}
+
+              {selectedSkill.has_update && (
+                <button
+                  onClick={() => onUpdateSkill?.(selectedSkill)}
+                  disabled={isUpdatingSkill}
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-md bg-blue-600 hover:bg-blue-500 text-white shadow transition-colors disabled:opacity-50"
+                  title="执行安全自动备份并更新至上游最新代码"
+                >
+                  {isUpdatingSkill ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ArrowUpCircle className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isUpdatingSkill ? "正在安全更新..." : "立即更新技能"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* 描述与指标 */}
-        <div className="grid grid-cols-3 gap-4 mt-6">
+        <div className="grid grid-cols-3 gap-4">
           <div className="col-span-2 bg-slate-900 border border-slate-800 rounded-lg p-4">
             <h3 className="text-xs font-semibold text-slate-400 uppercase mb-2">Skill 描述</h3>
             <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
@@ -175,6 +347,93 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
               </span>
             </div>
           </div>
+        </div>
+
+        {/* 安全备份历史与版本恢复看板 (参照 cc-switch 规范) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <History className="w-4 h-4 text-slate-400" />
+              <h3 className="text-xs font-semibold text-slate-200 uppercase">
+                安全备份与历史回退 ({backups.length})
+              </h3>
+            </div>
+            <span className="text-[11px] text-slate-500">
+              更新或修改前自动创建快照，最多保留 20 个历史副本
+            </span>
+          </div>
+
+          {loadingBackups ? (
+            <div className="py-8 text-center text-slate-500 text-xs flex items-center justify-center space-x-2">
+              <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+              <span>正在读取备份快照...</span>
+            </div>
+          ) : backups.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-md">
+              <Archive className="w-8 h-8 mx-auto mb-2 opacity-30 text-slate-400" />
+              <p>暂无该技能的历史备份快照</p>
+              <p className="text-[10px] text-slate-600 mt-1">
+                在线更新或恢复时，系统会自动在此创建原件快照以保安全
+              </p>
+            </div>
+          ) : (
+            <div className="border border-slate-800 rounded-md divide-y divide-slate-800/80 max-h-60 overflow-y-auto">
+              {backups.map((b) => {
+                const isRestoring = restoringBackupId === b.id;
+                return (
+                  <div
+                    key={b.id}
+                    className="p-2.5 flex items-center justify-between hover:bg-slate-800/40 transition-colors text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-mono text-slate-300 font-medium">{b.id}</span>
+                        {b.reason && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 border border-slate-700 text-slate-400">
+                            {b.reason === "pre-update"
+                              ? "更新前快照"
+                              : b.reason === "pre-restore"
+                              ? "恢复前快照"
+                              : b.reason}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2 text-[10px] text-slate-500">
+                        <span>快照哈希: {b.content_hash ? b.content_hash.slice(0, 12) + "..." : "无"}</span>
+                        <span>·</span>
+                        <span>{new Date(b.created_at).toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        onClick={() => handleRestore(b)}
+                        disabled={isRestoring}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-teal-950 hover:bg-teal-900 border border-teal-800/60 text-teal-300 font-medium transition-colors disabled:opacity-50"
+                        title="将此历史快照恢复为当前中央仓库原件"
+                      >
+                        {isRestoring ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <RotateCcw className="w-3 h-3" />
+                        )}
+                        <span>{isRestoring ? "恢复中..." : "恢复"}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteBackup(b.id)}
+                        disabled={isRestoring}
+                        className="p-1 rounded hover:bg-rose-950/40 text-slate-500 hover:text-rose-400 transition-colors disabled:opacity-50"
+                        title="删除该备份快照"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </main>
     );

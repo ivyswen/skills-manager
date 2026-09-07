@@ -24,6 +24,12 @@ pub struct Skill {
     pub file_count: u32,
     pub char_count: u64,
     pub last_seen_at: String,
+    pub source: Option<String>,
+    pub remote_skill_id: Option<String>,
+    pub remote_hash: Option<String>,
+    pub has_update: Option<bool>,
+    pub last_checked_at: Option<String>,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -240,4 +246,117 @@ pub struct ImportPreviewResult {
     pub repository_exists: bool,
     pub projects: Vec<ImportProjectPreview>,
     pub settings_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketSkillItem {
+    pub id: String,
+    #[serde(rename = "skillId")]
+    pub skill_id: String,
+    pub name: String,
+    pub installs: u64,
+    pub source: String,
+    pub is_installed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketSearchResponse {
+    pub skills: Vec<MarketSkillItem>,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketInstallRequest {
+    pub source: String,
+    pub skill_id: String,
+    pub skill_name: String,
+    pub force_overwrite: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketInstallResult {
+    pub success: bool,
+    pub skill_name: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketUninstallCheckResult {
+    pub skill_name: String,
+    pub mounted_projects: Vec<String>,
+    pub can_direct_delete: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketUninstallRequest {
+    pub skill_name: String,
+    pub cascade_unmount: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketUninstallResult {
+    pub success: bool,
+    pub skill_name: String,
+    pub unmounted_count: usize,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketSkillDetail {
+    pub skill_id: String,
+    pub name: String,
+    pub source: String,
+    pub installs: u64,
+    pub is_installed: bool,
+    pub local_path: Option<String>,
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillUpdateInfo {
+    pub skill_name: String,
+    pub source: String,
+    pub skill_id: String,
+    pub current_hash: String,
+    pub remote_hash: String,
+    pub has_update: bool,
+    pub last_checked_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillUpdateResult {
+    pub success: bool,
+    pub skill_name: String,
+    pub old_hash: String,
+    pub new_hash: String,
+    pub backup_path: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchUpdateResult {
+    pub total: usize,
+    pub success_count: usize,
+    pub failed_count: usize,
+    pub results: Vec<SkillUpdateResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillBackupItem {
+    pub id: String,
+    pub skill_name: String,
+    pub source: Option<String>,
+    pub created_at: String,
+    pub backup_path: String,
+    pub content_hash: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillMetaFile {
+    pub name: String,
+    pub source: String,
+    pub skill_id: String,
+    pub installed_at: String,
+    pub updated_at: Option<String>,
 }

@@ -76,7 +76,7 @@ fn is_binary_file(path: &Path) -> bool {
 }
 
 /// 计算 Skill 目录哈希与度量（文件数、UTF-8 字符数）
-fn measure_skill_dir(dir: &Path) -> (u32, u64, String) {
+pub fn measure_skill_dir(dir: &Path) -> (u32, u64, String) {
     let mut file_count: u32 = 0;
     let mut char_count: u64 = 0;
     let mut hasher = Sha256::new();
@@ -85,7 +85,7 @@ fn measure_skill_dir(dir: &Path) -> (u32, u64, String) {
     let mut entries: Vec<PathBuf> = Vec::new();
     for entry in WalkDir::new(dir).into_iter().filter_entry(|e| {
         let name = e.file_name().to_string_lossy();
-        !name.starts_with(".git") && name != ".DS_Store"
+        !name.starts_with(".git") && name != ".DS_Store" && name != ".skill-meta.json"
     }) {
         if let Ok(e) = entry {
             if e.file_type().is_file() {
@@ -168,6 +168,22 @@ pub fn scan_repository(
 
         let relative_path = format!("skills/{}", folder_name);
 
+        // 读取并解析 .skill-meta.json (如果存在)
+        let meta_file = path.join(".skill-meta.json");
+        let (source, remote_skill_id, updated_at) = if meta_file.exists() {
+            if let Ok(c) = fs::read_to_string(&meta_file) {
+                if let Ok(meta) = serde_json::from_str::<crate::models::SkillMetaFile>(&c) {
+                    (Some(meta.source), Some(meta.skill_id), meta.updated_at)
+                } else {
+                    (None, None, None)
+                }
+            } else {
+                (None, None, None)
+            }
+        } else {
+            (None, None, None)
+        };
+
         skills.push(Skill {
             id: Uuid::new_v4().to_string(),
             repository_id: repo_id.to_string(),
@@ -180,6 +196,12 @@ pub fn scan_repository(
             file_count,
             char_count,
             last_seen_at: Utc::now().to_rfc3339(),
+            source,
+            remote_skill_id,
+            remote_hash: None,
+            has_update: None,
+            last_checked_at: None,
+            updated_at,
         });
     }
 

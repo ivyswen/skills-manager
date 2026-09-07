@@ -96,8 +96,8 @@ impl Database {
         let tx = conn.transaction().map_err(AppError::db_error)?;
         for s in skills {
             tx.execute(
-                "INSERT INTO skills (id, repository_id, name, relative_path, canonical_path, description, metadata_status, content_hash, file_count, char_count, last_seen_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                "INSERT INTO skills (id, repository_id, name, relative_path, canonical_path, description, metadata_status, content_hash, file_count, char_count, last_seen_at, source, remote_skill_id, remote_hash, has_update, last_checked_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
                  ON CONFLICT(repository_id, name) DO UPDATE SET
                     relative_path = excluded.relative_path,
                     canonical_path = excluded.canonical_path,
@@ -106,7 +106,17 @@ impl Database {
                     content_hash = excluded.content_hash,
                     file_count = excluded.file_count,
                     char_count = excluded.char_count,
-                    last_seen_at = excluded.last_seen_at",
+                    last_seen_at = excluded.last_seen_at,
+                    source = COALESCE(excluded.source, skills.source),
+                    remote_skill_id = COALESCE(excluded.remote_skill_id, skills.remote_skill_id),
+                    remote_hash = COALESCE(excluded.remote_hash, skills.remote_hash),
+                    has_update = CASE
+                        WHEN skills.remote_hash IS NOT NULL AND skills.remote_hash != '' AND excluded.content_hash = skills.remote_hash THEN 0
+                        WHEN excluded.has_update IS NOT NULL THEN excluded.has_update
+                        ELSE COALESCE(skills.has_update, 0)
+                    END,
+                    last_checked_at = COALESCE(excluded.last_checked_at, skills.last_checked_at),
+                    updated_at = COALESCE(excluded.updated_at, skills.updated_at)",
                 params![
                     s.id,
                     s.repository_id,
@@ -118,7 +128,13 @@ impl Database {
                     s.content_hash,
                     s.file_count,
                     s.char_count,
-                    s.last_seen_at
+                    s.last_seen_at,
+                    s.source,
+                    s.remote_skill_id,
+                    s.remote_hash,
+                    s.has_update.map(|b| if b { 1 } else { 0 }),
+                    s.last_checked_at,
+                    s.updated_at,
                 ],
             ).map_err(AppError::db_error)?;
         }
@@ -129,12 +145,13 @@ impl Database {
     pub fn get_skills(&self, repository_id: &str) -> Result<Vec<Skill>, AppError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, repository_id, name, relative_path, canonical_path, description, metadata_status, content_hash, file_count, char_count, last_seen_at
+            "SELECT id, repository_id, name, relative_path, canonical_path, description, metadata_status, content_hash, file_count, char_count, last_seen_at, source, remote_skill_id, remote_hash, has_update, last_checked_at, updated_at
              FROM skills WHERE repository_id = ?1 ORDER BY name ASC"
         ).map_err(AppError::db_error)?;
 
         let rows = stmt
             .query_map(params![repository_id], |row| {
+                let has_up_int: i32 = row.get(14).unwrap_or(0);
                 Ok(Skill {
                     id: row.get(0)?,
                     repository_id: row.get(1)?,
@@ -147,6 +164,12 @@ impl Database {
                     file_count: row.get(8)?,
                     char_count: row.get(9)?,
                     last_seen_at: row.get(10)?,
+                    source: row.get(11)?,
+                    remote_skill_id: row.get(12)?,
+                    remote_hash: row.get(13)?,
+                    has_update: Some(has_up_int != 0),
+                    last_checked_at: row.get(15)?,
+                    updated_at: row.get(16)?,
                 })
             })
             .map_err(AppError::db_error)?;
@@ -165,12 +188,13 @@ impl Database {
     ) -> Result<Option<Skill>, AppError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, repository_id, name, relative_path, canonical_path, description, metadata_status, content_hash, file_count, char_count, last_seen_at
-             FROM skills WHERE repository_id = ?1 AND name = ?2"
+            "SELECT id, repository_id, name, relative_path, canonical_path, description, metadata_status, content_hash, file_count, char_count, last_seen_at, source, remote_skill_id, remote_hash, has_update, last_checked_at, updated_at
+             FROM skills WHERE repository_id = ?1 AND name = ?2 COLLATE NOCASE"
         ).map_err(AppError::db_error)?;
 
         let skill = stmt
             .query_row(params![repository_id, name], |row| {
+                let has_up_int: i32 = row.get(14).unwrap_or(0);
                 Ok(Skill {
                     id: row.get(0)?,
                     repository_id: row.get(1)?,
@@ -183,6 +207,12 @@ impl Database {
                     file_count: row.get(8)?,
                     char_count: row.get(9)?,
                     last_seen_at: row.get(10)?,
+                    source: row.get(11)?,
+                    remote_skill_id: row.get(12)?,
+                    remote_hash: row.get(13)?,
+                    has_update: Some(has_up_int != 0),
+                    last_checked_at: row.get(15)?,
+                    updated_at: row.get(16)?,
                 })
             })
             .optional()
@@ -194,12 +224,13 @@ impl Database {
     pub fn get_skill_by_id(&self, skill_id: &str) -> Result<Option<Skill>, AppError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, repository_id, name, relative_path, canonical_path, description, metadata_status, content_hash, file_count, char_count, last_seen_at
+            "SELECT id, repository_id, name, relative_path, canonical_path, description, metadata_status, content_hash, file_count, char_count, last_seen_at, source, remote_skill_id, remote_hash, has_update, last_checked_at, updated_at
              FROM skills WHERE id = ?1"
         ).map_err(AppError::db_error)?;
 
         let skill = stmt
             .query_row(params![skill_id], |row| {
+                let has_up_int: i32 = row.get(14).unwrap_or(0);
                 Ok(Skill {
                     id: row.get(0)?,
                     repository_id: row.get(1)?,
@@ -212,12 +243,128 @@ impl Database {
                     file_count: row.get(8)?,
                     char_count: row.get(9)?,
                     last_seen_at: row.get(10)?,
+                    source: row.get(11)?,
+                    remote_skill_id: row.get(12)?,
+                    remote_hash: row.get(13)?,
+                    has_update: Some(has_up_int != 0),
+                    last_checked_at: row.get(15)?,
+                    updated_at: row.get(16)?,
                 })
             })
             .optional()
             .map_err(AppError::db_error)?;
 
         Ok(skill)
+    }
+
+    pub fn update_skill_update_status(
+        &self,
+        repository_id: &str,
+        skill_name: &str,
+        remote_hash: &str,
+        has_update: bool,
+        last_checked_at: &str,
+    ) -> Result<(), AppError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE skills SET
+                remote_hash = ?1,
+                has_update = ?2,
+                last_checked_at = ?3
+             WHERE repository_id = ?4 AND name = ?5 COLLATE NOCASE",
+            params![
+                remote_hash,
+                has_update as i32,
+                last_checked_at,
+                repository_id,
+                skill_name,
+            ],
+        )
+        .map_err(AppError::db_error)?;
+        Ok(())
+    }
+
+    pub fn update_skill_after_update(
+        &self,
+        repository_id: &str,
+        skill_name: &str,
+        new_hash: &str,
+        updated_at: &str,
+    ) -> Result<(), AppError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE skills SET
+                content_hash = ?1,
+                remote_hash = ?1,
+                has_update = 0,
+                updated_at = ?2,
+                last_checked_at = ?2
+             WHERE repository_id = ?3 AND name = ?4 COLLATE NOCASE",
+            params![new_hash, updated_at, repository_id, skill_name,],
+        )
+        .map_err(AppError::db_error)?;
+        Ok(())
+    }
+
+    pub fn set_skill_source(
+        &self,
+        repository_id: &str,
+        skill_name: &str,
+        source: &str,
+        remote_skill_id: &str,
+    ) -> Result<(), AppError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE skills SET
+                source = ?1,
+                remote_skill_id = ?2
+             WHERE repository_id = ?3 AND name = ?4 COLLATE NOCASE",
+            params![source, remote_skill_id, repository_id, skill_name,],
+        )
+        .map_err(AppError::db_error)?;
+        Ok(())
+    }
+
+    pub fn get_skill_source_from_logs(
+        &self,
+        skill_name: &str,
+    ) -> Result<Option<(String, String)>, AppError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT message FROM operation_logs
+             WHERE operation_type IN ('market_install', 'skill_update')
+               AND (skill_name = ?1 COLLATE NOCASE OR message LIKE ?2)
+             ORDER BY created_at DESC LIMIT 1",
+            )
+            .map_err(AppError::db_error)?;
+
+        let pattern = format!("%{}%", skill_name);
+        let msg: Option<String> = stmt
+            .query_row(params![skill_name, pattern], |r| r.get(0))
+            .optional()
+            .map_err(AppError::db_error)?;
+
+        if let Some(text) = msg {
+            // 解析格式: "从市场成功安装 Skill: xxx (源: owner/repo)"
+            if let Some((_, after_src)) = text.split_once("(源: ") {
+                if let Some((src, _)) = after_src.split_once(')') {
+                    let src = src.trim().to_string();
+                    return Ok(Some((src, skill_name.to_string())));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn delete_skill_by_name(&self, repository_id: &str, name: &str) -> Result<(), AppError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM skills WHERE repository_id = ?1 AND name = ?2 COLLATE NOCASE",
+            params![repository_id, name],
+        )
+        .map_err(AppError::db_error)?;
+        Ok(())
     }
 
     // --- Projects ---
@@ -503,6 +650,41 @@ impl Database {
                     backup_path: row.get(9)?,
                     content_hash: row.get(10)?,
                     is_outdated: None,
+                    created_at: row.get(11)?,
+                })
+            })
+            .map_err(AppError::db_error)?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(r.map_err(AppError::db_error)?);
+        }
+        Ok(list)
+    }
+
+    pub fn get_mounts_by_skill_name(&self, skill_name: &str) -> Result<Vec<Mount>, AppError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, skill_id, skill_name, project_id, link_path, resolved_target, mount_mode, status, managed_by_app, backup_path, content_hash, created_at
+             FROM mounts WHERE skill_name = ?1"
+        ).map_err(AppError::db_error)?;
+
+        let rows = stmt
+            .query_map(params![skill_name], |row| {
+                let managed_int: i32 = row.get(8)?;
+                Ok(Mount {
+                    id: row.get(0)?,
+                    skill_id: row.get(1)?,
+                    skill_name: row.get(2)?,
+                    project_id: row.get(3)?,
+                    link_path: row.get(4)?,
+                    resolved_target: row.get(5)?,
+                    mount_mode: row.get(6)?,
+                    status: row.get(7)?,
+                    managed_by_app: managed_int != 0,
+                    backup_path: row.get(9)?,
+                    content_hash: row.get(10)?,
+                    is_outdated: Some(false),
                     created_at: row.get(11)?,
                 })
             })

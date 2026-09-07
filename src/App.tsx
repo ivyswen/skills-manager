@@ -18,6 +18,7 @@ import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { MiddleSkills } from "./components/layout/MiddleSkills";
 import { RightDetails } from "./components/layout/RightDetails";
 import { BottomStatusBar } from "./components/layout/BottomStatusBar";
+import { MarketView } from "./components/market/MarketView";
 
 import { ConflictDialog } from "./components/modals/ConflictDialog";
 import { DegradationDialog } from "./components/modals/DegradationDialog";
@@ -37,6 +38,11 @@ export const App: React.FC = () => {
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set());
   const [selectedSkillDetail, setSelectedSkillDetail] = useState<Skill | null>(null);
   const [viewMode, setViewMode] = useState<"project" | "skill">("project");
+  // 顶层视图切换：仓库 (3栏) vs 市场 (skills.sh)
+  const [appView, setAppView] = useState<"repo" | "market">("repo");
+  const [marketSearchQuery, setMarketSearchQuery] = useState("");
+  const [marketActiveQuery, setMarketActiveQuery] = useState("");
+  const [marketSearchTrigger, setMarketSearchTrigger] = useState(0);
 
   // 诊断与状态
   const [diagnosticsMap, setDiagnosticsMap] = useState<Record<string, ProjectDiagnostic>>({});
@@ -46,6 +52,11 @@ export const App: React.FC = () => {
   const [statusType, setStatusType] = useState<"info" | "success" | "error">("info");
   const [recentBatchId, setRecentBatchId] = useState<string | null>(null);
   const [rollingBack, setRollingBack] = useState(false);
+
+  // 技能更新与备份状态
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [updatingSkillNames, setUpdatingSkillNames] = useState<Set<string>>(new Set());
+  const [isBatchUpdating, setIsBatchUpdating] = useState(false);
 
   // 弹窗状态
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
@@ -365,6 +376,118 @@ export const App: React.FC = () => {
     }
   };
 
+  // 检查技能更新
+  const handleCheckSkillUpdates = async (skillName?: string) => {
+    setIsCheckingUpdates(true);
+    try {
+      const results = await api.checkSkillUpdates(skillName);
+      if (repository) {
+        const scanRes = await api.scanRepository();
+        setSkills(scanRes.skills);
+        if (selectedSkillDetail) {
+          const refreshed = scanRes.skills.find((s) => s.id === selectedSkillDetail.id);
+          if (refreshed) setSelectedSkillDetail(refreshed);
+        }
+      }
+      if (skillName) {
+        const target = results.find((r) => r.skill_name === skillName);
+        if (target?.has_update) {
+          showFeedback(`技能 "${skillName}" 发现新版本！`, "info");
+        } else {
+          showFeedback(`技能 "${skillName}" 已是最新版本`, "success");
+        }
+      } else {
+        const updatableCount = results.filter((r) => r.has_update).length;
+        if (updatableCount > 0) {
+          showFeedback(`更新检查完成：发现 ${updatableCount} 个技能有可用新版本`, "info");
+        } else {
+          showFeedback(`检查完成：当前所有可追踪技能均已是最新`, "success");
+        }
+      }
+    } catch (e: any) {
+      showFeedback(`检查更新失败: ${e?.message || e}`, "error");
+    } finally {
+      setIsCheckingUpdates(false);
+    }
+  };
+
+  // 单个技能更新
+  const handleUpdateSkill = async (skill: Skill) => {
+    setUpdatingSkillNames((prev) => {
+      const next = new Set(prev);
+      next.add(skill.name);
+      return next;
+    });
+    try {
+      const res = await api.updateSkill(skill.name);
+      if (res.success) {
+        showFeedback(`技能 "${skill.name}" 已成功更新至最新版本！`, "success");
+        if (repository) {
+          const scanRes = await api.scanRepository();
+          setSkills(scanRes.skills);
+          const refreshed = scanRes.skills.find((s) => s.id === skill.id || s.name === skill.name);
+          if (refreshed) setSelectedSkillDetail(refreshed);
+        }
+        if (activeProjectId) {
+          await diagnoseActiveProject(activeProjectId);
+        }
+      } else {
+        showFeedback(`技能 "${skill.name}" 更新失败: ${res.message || "未知原因"}`, "error");
+      }
+    } catch (e: any) {
+      showFeedback(`更新异常: ${e?.message || e}`, "error");
+    } finally {
+      setUpdatingSkillNames((prev) => {
+        const next = new Set(prev);
+        next.delete(skill.name);
+        return next;
+      });
+    }
+  };
+
+  // 批量更新技能
+  const handleBatchUpdate = async (skillNames?: string[]) => {
+    setIsBatchUpdating(true);
+    try {
+      const res = await api.batchUpdateSkills(skillNames);
+      showFeedback(
+        `批量更新完成：成功 ${res.success_count} 个，失败 ${res.failed_count} 个`,
+        res.failed_count === 0 ? "success" : "info"
+      );
+      if (repository) {
+        const scanRes = await api.scanRepository();
+        setSkills(scanRes.skills);
+        if (selectedSkillDetail) {
+          const refreshed = scanRes.skills.find((s) => s.id === selectedSkillDetail.id);
+          if (refreshed) setSelectedSkillDetail(refreshed);
+        }
+      }
+      if (activeProjectId) {
+        await diagnoseActiveProject(activeProjectId);
+      }
+    } catch (e: any) {
+      showFeedback(`批量更新失败: ${e?.message || e}`, "error");
+    } finally {
+      setIsBatchUpdating(false);
+    }
+  };
+
+  // 备份还原后同步数据
+  const handleSkillRestored = async () => {
+    showFeedback("已成功从安全备份快照还原技能", "success");
+    if (repository) {
+      const scanRes = await api.scanRepository();
+      setSkills(scanRes.skills);
+      if (selectedSkillDetail) {
+        const refreshed = scanRes.skills.find((s) => s.id === selectedSkillDetail.id);
+        if (refreshed) setSelectedSkillDetail(refreshed);
+      }
+    }
+    if (activeProjectId) {
+      await diagnoseActiveProject(activeProjectId);
+    }
+  };
+
   // 配置导出
   const handleExportConfig = async () => {
     try {
@@ -436,6 +559,20 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleMarketSearchSubmit = (overrideQuery?: string) => {
+    const q = (overrideQuery !== undefined ? overrideQuery : marketSearchQuery).trim();
+    if (!q) {
+      showFeedback("请输入技能名称或关键词后再搜索", "info");
+      return;
+    }
+    if (overrideQuery !== undefined) {
+      setMarketSearchQuery(overrideQuery);
+    }
+    setAppView("market");
+    setMarketActiveQuery(q);
+    setMarketSearchTrigger((prev) => prev + 1);
+  };
+
   const activeProject = projects.find((p) => p.id === activeProjectId) || null;
   const activeDiagnostic = activeProjectId ? diagnosticsMap[activeProjectId] || null : null;
 
@@ -444,6 +581,11 @@ export const App: React.FC = () => {
       {/* 顶部导航 */}
       <TopToolbar
         repository={repository}
+        currentView={appView}
+        onViewChange={setAppView}
+        marketSearchQuery={marketSearchQuery}
+        onMarketSearchChange={setMarketSearchQuery}
+        onMarketSearchSubmit={() => handleMarketSearchSubmit()}
         onRefreshAll={handleRefreshAll}
         onGitPull={handleGitPull}
         onOpenLogs={() => {
@@ -457,10 +599,25 @@ export const App: React.FC = () => {
         loading={loading}
       />
 
-      {/* 主体三栏区域 */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* 左侧栏：仓库与项目 */}
-        <LeftSidebar
+      {/* 主体展示区：市场视图 vs 仓库3栏挂载视图 */}
+      {appView === "market" ? (
+        <MarketView
+          searchQuery={marketActiveQuery}
+          searchTrigger={marketSearchTrigger}
+          onQuickSearch={(q) => handleMarketSearchSubmit(q)}
+          onSyncRepo={async () => {
+            if (repository) {
+              const scanRes = await api.scanRepository();
+              setSkills(scanRes.skills);
+            }
+            await loadInitialData();
+          }}
+          onShowFeedback={showFeedback}
+        />
+      ) : (
+        <div className="flex-1 flex overflow-hidden">
+          {/* 左侧栏：仓库与项目 */}
+          <LeftSidebar
           repository={repository}
           projects={projects}
           activeProjectId={activeProjectId}
@@ -508,6 +665,12 @@ export const App: React.FC = () => {
             setViewMode("skill");
           }}
           onQuickMount={handleQuickMount}
+          onCheckUpdates={() => handleCheckSkillUpdates()}
+          isCheckingUpdates={isCheckingUpdates}
+          onUpdateSkill={handleUpdateSkill}
+          onBatchUpdate={handleBatchUpdate}
+          updatingSkillNames={updatingSkillNames}
+          isBatchUpdating={isBatchUpdating}
         />
 
         {/* 右侧栏：项目挂载看板 / Skill 详情看板 */}
@@ -527,8 +690,14 @@ export const App: React.FC = () => {
           mountMode={mountMode}
           onMountModeChange={setMountMode}
           onSwitchMountMode={handleSwitchMountMode}
+          onUpdateSkill={handleUpdateSkill}
+          onCheckSkillUpdate={(name) => handleCheckSkillUpdates(name)}
+          isUpdatingSkill={selectedSkillDetail ? updatingSkillNames.has(selectedSkillDetail.name) : false}
+          isCheckingUpdate={isCheckingUpdates}
+          onSkillRestored={handleSkillRestored}
         />
       </div>
+      )}
 
       {/* 底部状态条 */}
       <BottomStatusBar
