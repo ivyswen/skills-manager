@@ -2,6 +2,7 @@ pub mod commands;
 pub mod core;
 pub mod db;
 pub mod models;
+pub mod single_instance;
 pub mod tray;
 
 use db::Database;
@@ -10,16 +11,11 @@ use tauri::webview::PageLoadEvent;
 use tauri::Manager;
 
 pub fn run() {
+    // 单实例守卫：在 Tauri 初始化之前通过命名互斥量检测
+    // 若已有实例运行，激活其窗口后立即退出，不会创建第二个托盘图标
+    single_instance::enforce_single_instance();
+
     tauri::Builder::default()
-        // 单实例插件必须最先注册，防止用户启动多个进程
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            // 第二个实例启动时：静默激活并聚焦已有主窗口
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .on_page_load(|webview, payload| {
