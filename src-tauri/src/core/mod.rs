@@ -5,5 +5,6 @@ pub mod link_engine;
 pub mod logger;
 pub mod market_service;
 pub mod scanner;
+pub mod skill_reverse_service;
 pub mod skill_update_service;
 pub mod status_checker;

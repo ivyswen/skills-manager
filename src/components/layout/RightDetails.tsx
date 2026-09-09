@@ -21,7 +21,8 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { api } from "../../services/api";
-import { Project, Skill, Mount, ProjectDiagnostic, SkillBackupItem } from "../../types";
+import { Project, Skill, Mount, ProjectDiagnostic, SkillBackupItem, SkillDiffResult } from "../../types";
+import { ReversePushConfirmModal } from "../modals/ReversePushConfirmModal";
 
 interface RightDetailsProps {
   viewMode: "project" | "skill";
@@ -44,6 +45,7 @@ interface RightDetailsProps {
   isUpdatingSkill?: boolean;
   isCheckingUpdate?: boolean;
   onSkillRestored?: () => void;
+  onRefreshProject?: () => void;
 }
 
 export const RightDetails: React.FC<RightDetailsProps> = ({
@@ -66,10 +68,66 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
   isUpdatingSkill = false,
   isCheckingUpdate = false,
   onSkillRestored,
+  onRefreshProject,
 }) => {
   const [backups, setBackups] = useState<SkillBackupItem[]>([]);
   const [loadingBackups, setLoadingBackups] = useState(false);
   const [restoringBackupId, setRestoringBackupId] = useState<string | null>(null);
+
+  // 反向更新与未托管入库状态
+  const [reversePushModalOpen, setReversePushModalOpen] = useState(false);
+  const [diffResult, setDiffResult] = useState<SkillDiffResult | null>(null);
+  const [isPushing, setIsPushing] = useState(false);
+  const [importingDir, setImportingDir] = useState<string | null>(null);
+
+  const handleTriggerReversePush = async (mount: Mount) => {
+    if (!activeProject) return;
+    try {
+      const diff = await api.inspectReverseDiff(activeProject.id, mount.skill_name);
+      setDiffResult(diff);
+      setReversePushModalOpen(true);
+    } catch (e: any) {
+      alert(`检查文件差异失败: ${e?.message || e}`);
+    }
+  };
+
+  const handleConfirmReversePush = async (force: boolean) => {
+    if (!activeProject || !diffResult) return;
+    setIsPushing(true);
+    try {
+      const res = await api.executeReversePush({
+        project_id: activeProject.id,
+        skill_name: diffResult.skill_name,
+        force,
+      });
+      alert(res.message || "反向更新中央仓库原件成功！");
+      setReversePushModalOpen(false);
+      setDiffResult(null);
+      onRefreshProject?.();
+    } catch (e: any) {
+      alert(`反向更新失败: ${e?.message || e}`);
+    } finally {
+      setIsPushing(false);
+    }
+  };
+
+  const handleImportUnmanaged = async (dirName: string) => {
+    if (!activeProject) return;
+    setImportingDir(dirName);
+    try {
+      const res = await api.importUnmanagedSkill(activeProject.id, dirName, mountMode);
+      if (res.success) {
+        alert(`未托管技能 "${dirName}" 已成功入库并纳管为挂载项目！`);
+        onRefreshProject?.();
+      } else {
+        alert(`入库失败: ${res.error_message || "未知原因"}`);
+      }
+    } catch (e: any) {
+      alert(`入库异常: ${e?.message || e}`);
+    } finally {
+      setImportingDir(null);
+    }
+  };
 
   const fetchBackups = useCallback(async (skillName: string) => {
     setLoadingBackups(true);
@@ -135,7 +193,36 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
     }
   };
 
-  const renderStatusBadge = (status: string, isOutdated?: boolean | null) => {
+  const renderStatusBadge = (
+    status: string,
+    isOutdated?: boolean | null,
+    hasLocalChanges?: boolean | null,
+    hasConflict?: boolean | null
+  ) => {
+    if (hasConflict) {
+      return (
+        <span
+          className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30"
+          title="中央仓库原件在外部被更新，且项目内副本也被修改（双向冲突）"
+        >
+          <AlertTriangle className="w-3 h-3 text-rose-400" />
+          <span>双向冲突</span>
+        </span>
+      );
+    }
+
+    if (hasLocalChanges) {
+      return (
+        <span
+          className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
+          title="项目内副本存在未推送到中央仓库的改动"
+        >
+          <ArrowUpCircle className="w-3 h-3 text-indigo-400" />
+          <span>本地已修改</span>
+        </span>
+      );
+    }
+
     switch (status) {
       case "NORMAL":
         return (
@@ -145,8 +232,11 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
               <span>正常</span>
             </span>
             {isOutdated && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20" title="原件内容已更新，副本处于陈旧状态">
-                副本陈旧
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                title="原件内容已更新，副本处于陈旧状态"
+              >
+                待更新
               </span>
             )}
           </div>
@@ -600,20 +690,46 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
         </div>
       </div>
 
-      {/* 未托管对象警告 */}
+      {/* 未托管对象警告与一键入库 */}
       {unmanaged.length > 0 && (
-        <div className="bg-amber-950/30 border border-amber-800/60 rounded-lg p-3.5">
+        <div className="bg-amber-950/30 border border-amber-800/60 rounded-lg p-3.5 space-y-3">
           <div className="flex items-start space-x-2.5">
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <h4 className="text-xs font-semibold text-amber-300">
                 发现 {unmanaged.length} 个未托管实体目录
               </h4>
               <p className="text-[11px] text-amber-400/80 mt-0.5">
-                位于 <code className="font-mono">.agents/skills/</code> 中，但未在本工具中登记：
-                {unmanaged.join(", ")}。
+                位于 <code className="font-mono">.agents/skills/</code> 中，尚未在本工具登记。若包含 SKILL.md，可一键推送入库并原地纳管：
               </p>
             </div>
+          </div>
+
+          <div className="space-y-1.5 pl-6">
+            {unmanaged.map((dirName) => (
+              <div
+                key={dirName}
+                className="flex items-center justify-between bg-slate-900/80 border border-amber-900/50 rounded-md px-3 py-2 text-xs"
+              >
+                <div className="flex items-center space-x-2 font-mono text-slate-200">
+                  <Folder className="w-3.5 h-3.5 text-amber-400/70" />
+                  <span>{dirName}</span>
+                </div>
+                <button
+                  onClick={() => handleImportUnmanaged(dirName)}
+                  disabled={importingDir === dirName}
+                  className="inline-flex items-center space-x-1.5 px-2.5 py-1 text-[11px] font-semibold rounded bg-teal-950 hover:bg-teal-900 border border-teal-800/70 text-teal-300 transition-colors disabled:opacity-50"
+                  title="将此目录推送至中央仓库并纳管为项目挂载"
+                >
+                  {importingDir === dirName ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ArrowUpCircle className="w-3.5 h-3.5" />
+                  )}
+                  <span>{importingDir === dirName ? "入库中..." : "入库为新技能"}</span>
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -669,11 +785,30 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
                       {mount.mount_mode.toUpperCase()}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3">{renderStatusBadge(mount.status, mount.is_outdated)}</td>
+                  <td className="py-2.5 px-3">
+                    {renderStatusBadge(
+                      mount.status,
+                      mount.is_outdated,
+                      mount.has_local_changes,
+                      mount.has_conflict
+                    )}
+                  </td>
                   <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px] truncate max-w-[200px]" title={mount.link_path}>
                     {mount.link_path}
                   </td>
                   <td className="py-2.5 px-3 text-right space-x-1.5">
+                    {/* 反向更新按钮：当处于 Copy 模式且有本地修改或双向冲突时提供 */}
+                    {mount.mount_mode === "copy" && (mount.has_local_changes || mount.has_conflict) && (
+                      <button
+                        onClick={() => handleTriggerReversePush(mount)}
+                        className="inline-flex items-center space-x-1 px-2 py-1 text-[11px] rounded bg-indigo-950 hover:bg-indigo-900 border border-indigo-700/80 text-indigo-300 transition-colors"
+                        title="将项目内副本修改反向推送到中央仓库原件"
+                      >
+                        <ArrowUpCircle className="w-3 h-3" />
+                        <span>推送到中央</span>
+                      </button>
+                    )}
+
                     {mount.is_outdated && (
                       <button
                         onClick={() => onMountRepair(mount)}
@@ -732,6 +867,18 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
           </table>
         )}
       </div>
+      {/* 反向更新差异确认弹窗 */}
+      <ReversePushConfirmModal
+        isOpen={reversePushModalOpen}
+        diffResult={diffResult}
+        projectName={activeProject.name}
+        onConfirm={handleConfirmReversePush}
+        onClose={() => {
+          setReversePushModalOpen(false);
+          setDiffResult(null);
+        }}
+        isLoading={isPushing}
+      />
     </main>
   );
 };

@@ -71,6 +71,9 @@ pub fn run() {
             commands::skill_update_cmd::skill_backup_list,
             commands::skill_update_cmd::skill_backup_restore,
             commands::skill_update_cmd::skill_backup_delete,
+            commands::skill_reverse_cmd::skill_inspect_reverse_diff,
+            commands::skill_reverse_cmd::skill_execute_reverse_push,
+            commands::skill_reverse_cmd::skill_import_unmanaged,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

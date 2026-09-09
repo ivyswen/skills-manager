@@ -615,6 +615,8 @@ impl Database {
                     backup_path: row.get(9)?,
                     content_hash: mount_hash,
                     is_outdated: Some(is_outdated),
+                    has_local_changes: None,
+                    has_conflict: None,
                     created_at: row.get(11)?,
                 })
             })
@@ -650,6 +652,8 @@ impl Database {
                     backup_path: row.get(9)?,
                     content_hash: row.get(10)?,
                     is_outdated: None,
+                    has_local_changes: None,
+                    has_conflict: None,
                     created_at: row.get(11)?,
                 })
             })
@@ -685,6 +689,8 @@ impl Database {
                     backup_path: row.get(9)?,
                     content_hash: row.get(10)?,
                     is_outdated: Some(false),
+                    has_local_changes: None,
+                    has_conflict: None,
                     created_at: row.get(11)?,
                 })
             })
@@ -720,6 +726,8 @@ impl Database {
                     backup_path: row.get(9)?,
                     content_hash: row.get(10)?,
                     is_outdated: None,
+                    has_local_changes: None,
+                    has_conflict: None,
                     created_at: row.get(11)?,
                 })
             })
@@ -756,6 +764,8 @@ impl Database {
                     backup_path: row.get(9)?,
                     content_hash: row.get(10)?,
                     is_outdated: None,
+                    has_local_changes: None,
+                    has_conflict: None,
                     created_at: row.get(11)?,
                 })
             })

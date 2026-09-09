@@ -695,6 +695,15 @@ export const App: React.FC = () => {
           isUpdatingSkill={selectedSkillDetail ? updatingSkillNames.has(selectedSkillDetail.name) : false}
           isCheckingUpdate={isCheckingUpdates}
           onSkillRestored={handleSkillRestored}
+          onRefreshProject={async () => {
+            if (activeProjectId) {
+              await diagnoseActiveProject(activeProjectId);
+            }
+            if (repository) {
+              const res = await api.scanRepository();
+              setSkills(res.skills);
+            }
+          }}
         />
       </div>
       )}

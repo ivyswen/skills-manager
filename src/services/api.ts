@@ -24,6 +24,9 @@ import {
   SkillUpdateResult,
   BatchUpdateResult,
   SkillBackupItem,
+  SkillDiffResult,
+  ReversePushRequest,
+  ReversePushResult,
 } from "../types";
 
 // 统一封装 Tauri Invoke
@@ -244,5 +247,32 @@ export const api = {
       backupId,
     });
   },
+
+  // --- Reverse Sync & Import ---
+  async inspectReverseDiff(projectId: string, skillName: string): Promise<SkillDiffResult> {
+    return await invoke<SkillDiffResult>("skill_inspect_reverse_diff", {
+      projectId,
+      skillName,
+    });
+  },
+
+  async executeReversePush(request: ReversePushRequest): Promise<ReversePushResult> {
+    return await invoke<ReversePushResult>("skill_execute_reverse_push", {
+      request,
+    });
+  },
+
+  async importUnmanagedSkill(
+    projectId: string,
+    dirName: string,
+    preferredMode?: string
+  ): Promise<MountResult> {
+    return await invoke<MountResult>("skill_import_unmanaged", {
+      projectId,
+      dirName,
+      preferredMode: preferredMode || null,
+    });
+  },
 };
+
 

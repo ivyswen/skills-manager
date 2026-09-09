@@ -110,6 +110,10 @@ pub struct Mount {
     pub backup_path: Option<String>,
     pub content_hash: Option<String>,
     pub is_outdated: Option<bool>,
+    #[serde(default)]
+    pub has_local_changes: Option<bool>,
+    #[serde(default)]
+    pub has_conflict: Option<bool>,
     pub created_at: String,
 }
 
@@ -359,4 +363,35 @@ pub struct SkillMetaFile {
     pub skill_id: String,
     pub installed_at: String,
     pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillDiffItem {
+    pub path: String,
+    pub change_type: String, // "ADDED" | "MODIFIED" | "DELETED"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillDiffResult {
+    pub skill_name: String,
+    pub has_conflict: bool,
+    pub files: Vec<SkillDiffItem>,
+    pub local_hash: String,
+    pub central_hash: String,
+    pub base_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReversePushRequest {
+    pub project_id: String,
+    pub skill_name: String,
+    pub force: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReversePushResult {
+    pub success: bool,
+    pub skill_name: String,
+    pub backup_id: Option<String>,
+    pub message: String,
 }

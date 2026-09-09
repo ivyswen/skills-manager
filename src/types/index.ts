@@ -74,6 +74,8 @@ export interface Mount {
   backup_path?: string | null;
   content_hash?: string | null;
   is_outdated?: boolean | null;
+  has_local_changes?: boolean | null;
+  has_conflict?: boolean | null;
   created_at: string;
 }
 
@@ -269,4 +271,32 @@ export interface SkillBackupItem {
   content_hash: string;
   reason?: string | null;
 }
+
+export interface SkillDiffItem {
+  path: string;
+  change_type: "ADDED" | "MODIFIED" | "DELETED";
+}
+
+export interface SkillDiffResult {
+  skill_name: string;
+  has_conflict: boolean;
+  files: SkillDiffItem[];
+  local_hash: string;
+  central_hash: string;
+  base_hash: string;
+}
+
+export interface ReversePushRequest {
+  project_id: string;
+  skill_name: string;
+  force: boolean;
+}
+
+export interface ReversePushResult {
+  success: boolean;
+  skill_name: string;
+  backup_id?: string | null;
+  message: string;
+}
+
 

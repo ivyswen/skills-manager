@@ -116,6 +116,8 @@ pub async fn mount_skills(
                     backup_path: backup_str.clone(),
                     content_hash: Some(skill.content_hash.clone()),
                     is_outdated: Some(false),
+                    has_local_changes: Some(false),
+                    has_conflict: Some(false),
                     created_at: Utc::now().to_rfc3339(),
                 };
 

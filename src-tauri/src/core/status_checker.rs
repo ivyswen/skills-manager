@@ -78,17 +78,42 @@ pub fn diagnose_project_mounts(
             if m.mount_mode == "copy" {
                 if target_path.is_dir() {
                     m.status = MountStatus::Normal.as_str().to_string();
-                    if let Some(skill) = skill_opt {
-                        if let Some(ref mh) = m.content_hash {
-                            m.is_outdated = Some(!mh.is_empty() && mh != &skill.content_hash);
+
+                    // 计算项目本地 Copy 副本的实时哈希
+                    let (_, _, local_hash) = crate::core::scanner::measure_skill_dir(&target_path);
+
+                    if let Some(ref base_hash) = m.content_hash {
+                        let has_local = !base_hash.is_empty() && base_hash != &local_hash;
+                        m.has_local_changes = Some(has_local);
+
+                        if let Some(skill) = skill_opt {
+                            let central_changed =
+                                !base_hash.is_empty() && base_hash != &skill.content_hash;
+                            m.is_outdated = Some(central_changed);
+                            m.has_conflict = Some(
+                                has_local && central_changed && local_hash != skill.content_hash,
+                            );
+                        } else {
+                            m.is_outdated = Some(false);
+                            m.has_conflict = Some(false);
+                        }
+                    } else {
+                        m.has_local_changes = Some(false);
+                        m.has_conflict = Some(false);
+                        if skill_opt.is_some() {
+                            m.is_outdated = Some(false);
                         }
                     }
                 } else {
                     m.status = MountStatus::Conflict.as_str().to_string();
+                    m.has_local_changes = Some(false);
+                    m.has_conflict = Some(false);
                 }
             } else {
                 // 预期为 symlink/junction，物理上却是普通文件或普通目录
                 m.status = MountStatus::Conflict.as_str().to_string();
+                m.has_local_changes = Some(false);
+                m.has_conflict = Some(false);
             }
         }
 
@@ -160,6 +185,8 @@ mod tests {
             backup_path: None,
             content_hash: None,
             is_outdated: None,
+            has_local_changes: None,
+            has_conflict: None,
             created_at: Utc::now().to_rfc3339(),
         };
 

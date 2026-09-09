@@ -140,6 +140,8 @@ Review the diff thoroughly.
         backup_path: None,
         content_hash: Some(skill.content_hash.clone()),
         is_outdated: Some(false),
+        has_local_changes: Some(false),
+        has_conflict: Some(false),
         created_at: Utc::now().to_rfc3339(),
     };
 
@@ -314,6 +316,8 @@ fn test_config_export_and_import_with_remapping() {
         backup_path: None,
         content_hash: Some("hash123".to_string()),
         is_outdated: Some(false),
+        has_local_changes: Some(false),
+        has_conflict: Some(false),
         created_at: Utc::now().to_rfc3339(),
     };
     db.upsert_mount(&mount).unwrap();
@@ -436,6 +440,8 @@ fn test_copy_mode_outdated_detection() {
         backup_path: None,
         content_hash: Some(skill_v1.content_hash.clone()),
         is_outdated: Some(false),
+        has_local_changes: Some(false),
+        has_conflict: Some(false),
         created_at: Utc::now().to_rfc3339(),
     };
 
