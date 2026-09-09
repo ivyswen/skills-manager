@@ -273,6 +273,19 @@ export const api = {
       preferredMode: preferredMode || null,
     });
   },
+
+  // --- App Settings ---
+  async getAppSetting(key: string): Promise<string | null> {
+    return await invoke<string | null>("app_setting_get", { key });
+  },
+
+  async setAppSetting(key: string, value: string): Promise<void> {
+    await invoke<void>("app_setting_set", { key, value });
+  },
+
+  async getAllAppSettings(): Promise<Record<string, string>> {
+    return await invoke<Record<string, string>>("app_setting_get_all");
+  },
 };
 
 

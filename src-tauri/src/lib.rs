@@ -2,6 +2,7 @@ pub mod commands;
 pub mod core;
 pub mod db;
 pub mod models;
+pub mod tray;
 
 use db::Database;
 use std::fs;
@@ -19,6 +20,23 @@ pub fn run() {
                 }
             }
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let app = window.app_handle();
+                let should_close_to_tray = if let Some(db) = app.try_state::<Database>() {
+                    db.get_setting("close_to_tray")
+                        .unwrap_or(None)
+                        .unwrap_or_else(|| "true".to_string())
+                } else {
+                    "true".to_string()
+                };
+
+                if should_close_to_tray == "true" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -31,6 +49,12 @@ pub fn run() {
                 .expect("Failed to initialize SQLite database");
 
             app.manage(db);
+
+            // 初始化系统托盘图标与菜单
+            if let Err(err) = tray::create_app_tray(app) {
+                crate::core::logger::error("Tray", &format!("初始化系统托盘失败: {err}"));
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -74,6 +98,9 @@ pub fn run() {
             commands::skill_reverse_cmd::skill_inspect_reverse_diff,
             commands::skill_reverse_cmd::skill_execute_reverse_push,
             commands::skill_reverse_cmd::skill_import_unmanaged,
+            commands::setting_cmd::app_setting_get,
+            commands::setting_cmd::app_setting_set,
+            commands::setting_cmd::app_setting_get_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
