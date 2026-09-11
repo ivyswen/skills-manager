@@ -18,10 +18,20 @@ pub async fn entry_link_setup(
         .ok_or_else(|| AppError::new("PROJECT_NOT_FOUND", "项目不存在"))?;
 
     let targets = db.get_agent_targets(&project_id)?;
-    let target = targets
-        .into_iter()
-        .find(|t| t.agent_type == agent_type)
-        .ok_or_else(|| AppError::new("AGENT_NOT_FOUND", "未找到对应的 Agent 配置"))?;
+    let target = match targets.into_iter().find(|t| t.agent_type == agent_type) {
+        Some(t) => t,
+        None => {
+            let new_target = crate::models::AgentTarget {
+                id: Uuid::new_v4().to_string(),
+                project_id: project.id.clone(),
+                agent_type: agent_type.clone(),
+                install_dir: ".agents/skills".to_string(),
+                link_mode: preferred_mode.clone().unwrap_or_else(|| "symlink".to_string()),
+            };
+            db.upsert_agent_target(&new_target)?;
+            new_target
+        }
+    };
 
     setup_entry_link(
         Path::new(&project.path),

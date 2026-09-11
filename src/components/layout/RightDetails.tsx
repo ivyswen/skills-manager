@@ -611,7 +611,7 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Claude Code 入口 */}
           {(() => {
             const claudeLink = entryLinks.find((l) => l.link_path.includes(".claude"));
@@ -679,6 +679,44 @@ export const RightDetails: React.FC<RightDetailsProps> = ({
                 ) : (
                   <button
                     onClick={() => onSetupEntryLink("codex", ".codex/skills")}
+                    className="px-2.5 py-1 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-400 transition-colors"
+                  >
+                    创建链接
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Pi 入口 */}
+          {(() => {
+            const piLink = entryLinks.find((l) => l.link_path.includes(".pi"));
+            const hasLink = piLink && piLink.status === "valid";
+            return (
+              <div className="bg-slate-850 border border-slate-700/60 rounded-lg p-3 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-medium text-slate-200">Pi 入口</span>
+                    <code className="text-[10px] text-slate-400">.pi/skills</code>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">指向 .agents/skills</p>
+                </div>
+                {hasLink ? (
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+                      已建立
+                    </span>
+                    <button
+                      onClick={() => onRemoveEntryLink(piLink.id, piLink.link_path)}
+                      className="p-1 hover:text-rose-400 text-slate-500"
+                      title="移除入口链接"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => onSetupEntryLink("pi", ".pi/skills")}
                     className="px-2.5 py-1 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-400 transition-colors"
                   >
                     创建链接

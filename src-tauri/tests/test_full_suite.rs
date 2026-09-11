@@ -250,6 +250,23 @@ fn test_entry_link_lifecycle() {
     );
     assert!(agents_skills.exists());
 
+    // 测试 Pi 入口软链接 (.pi/skills)
+    let status_pi_init = check_entry_link_status(&project_dir, ".pi/skills");
+    assert_eq!(status_pi_init, "missing");
+
+    setup_entry_link(&project_dir, ".pi/skills", Some("junction")).unwrap();
+    assert_eq!(
+        check_entry_link_status(&project_dir, ".pi/skills"),
+        "valid"
+    );
+
+    remove_entry_link(&project_dir, ".pi/skills").unwrap();
+    assert_eq!(
+        check_entry_link_status(&project_dir, ".pi/skills"),
+        "missing"
+    );
+    assert!(agents_skills.exists());
+
     let _ = fs::remove_dir_all(&temp);
 }
 

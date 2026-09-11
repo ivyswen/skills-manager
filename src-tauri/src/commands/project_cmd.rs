@@ -55,15 +55,17 @@ pub async fn project_add(
 
     db.save_project(&project)?;
 
-    // 默认创建 claude_code 目标
-    let target = AgentTarget {
-        id: Uuid::new_v4().to_string(),
-        project_id: project.id.clone(),
-        agent_type: "claude_code".to_string(),
-        install_dir: ".agents/skills".to_string(),
-        link_mode: "symlink".to_string(),
-    };
-    let _ = db.upsert_agent_target(&target);
+    // 默认创建内置 Agent 目标 (claude_code, codex, pi)
+    for agent in &["claude_code", "codex", "pi"] {
+        let target = AgentTarget {
+            id: Uuid::new_v4().to_string(),
+            project_id: project.id.clone(),
+            agent_type: agent.to_string(),
+            install_dir: ".agents/skills".to_string(),
+            link_mode: "symlink".to_string(),
+        };
+        let _ = db.upsert_agent_target(&target);
+    }
 
     // 记录审计日志
     let log = OperationLog {

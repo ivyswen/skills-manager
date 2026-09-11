@@ -45,7 +45,7 @@ pub struct Project {
 pub struct AgentTarget {
     pub id: String,
     pub project_id: String,
-    pub agent_type: String,  // "claude_code" | "codex" | "custom"
+    pub agent_type: String,  // "claude_code" | "codex" | "pi" | "custom"
     pub install_dir: String, // fixed to ".agents/skills"
     pub link_mode: String,   // "symlink" | "junction" | "copy"
 }
